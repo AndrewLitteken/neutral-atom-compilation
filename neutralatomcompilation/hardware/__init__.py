@@ -1,8 +1,3 @@
 from .hardware import (
-	Hardware,
+  Hardware,
 )
-
-from .hardware_general import (
-  Hardware2,
-)
-

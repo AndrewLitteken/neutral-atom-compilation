@@ -5,7 +5,7 @@ from typing import List, Tuple, DefaultDict, Dict, Set
 
 from .circuit_formats import create_circuit_digraph
 from ..hardware.hardware import Hardware
-from ..compiler.lookahead_compiler_new import circuit_to_dag, LabeledOp
+from ..compiler.lookahead_compiler import circuit_to_dag, LabeledOp
 
 def swap_num(circuit: qiskit.QuantumCircuit) -> int:
   '''

@@ -8,7 +8,7 @@ import numpy as np
 
 from typing import List
 
-from ..hardware.hardware_general import Hardware2, HardwareQubit
+from ..hardware.hardware import Hardware, HardwareQubit
 
 class ReRouteStrategy(enum.Enum):
   Fail = 1
@@ -18,10 +18,8 @@ class ReRouteStrategy(enum.Enum):
     return self.value == other.value
 
 class ShiftStrategy(enum.Enum):
-  NaiveMaxSpace = 1
-  NaiveMinMovement = 2
-  Clever = 3
-  InteractionGraph = 4
+  NaiveMinMovement = 1
+  InteractionGraph = 2
 
   def __eq__(self, other):
     return self.value == other.value

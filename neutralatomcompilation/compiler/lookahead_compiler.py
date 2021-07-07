@@ -3,7 +3,7 @@ import networkx as nx
 import numpy as np
 from collections import defaultdict
 
-from neutralatomcompilation.compiler.compiler_new import Compiler
+from neutralatomcompilation.compiler.compiler import Compiler
 
 class LabeledOp:
     def __init__(self, instruction, index):

@@ -1,5 +1,5 @@
 import qiskit
-from ..compiler.lookahead_compiler_new import circuit_to_dag
+from ..compiler.lookahead_compiler import circuit_to_dag
 from ..utilities.circuit_stats import digraph_to_time_steps
 import networkx as nx
 '''
