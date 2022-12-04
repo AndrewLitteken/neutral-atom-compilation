@@ -123,6 +123,105 @@ class Hardware:
                         self.connectivity.add_edge(qubit, other_qubit, weight=spacing)
         self.orig_connectivity = self.connectivity.copy()
 
+    def get_constrained_qubit_sets(self, number_qubits, method="wide"):
+        square_dimension = np.sqrt(number_qubits)
+        dims = [None, None]
+        if square_dimension.is_integer():
+            dims = [int(square_dimension), int(square_dimension)]
+        else:
+            dims = [int(np.ceil(square_dimension)), int(np.ceil(square_dimension))]
+
+        if method == "tight":
+            dims[-1] = int(np.ceil(number_qubits / dims[0]))
+
+        qubit_sets = []
+        curr_first = 0
+        break_out_outer = False
+        while curr_first + dims[0] <= self.dimension_info[0].size:
+
+            curr_second = 0
+            break_out_inner = False
+            while curr_second + dims[1] <= self.dimension_info[1].size:
+
+                curr_set = []
+                for i in range(curr_first, curr_first + dims[0]):
+                    for j in range(curr_second, curr_second + dims[1]):
+                        curr_set.append(self.hardware_loc_to_obj[(i, j)])
+                qubit_sets.append(curr_set)
+                curr_second += dims[1]
+
+                if curr_second + dims[1] >= self.dimension_info[1].size and not break_out_inner:
+                    curr_second = self.dimension_info[1].size - dims[1]
+                    break_out_inner = True
+
+            curr_first += dims[0]
+            if curr_first + dims[0] > self.dimension_info[0].size and not break_out_outer:
+                curr_first = self.dimension_info[0].size - dims[0]
+                break_out_outer = True
+        return qubit_sets
+
+    def get_non_overlapping_constrained_qubit_sets(self, number_qubits, method="wide", spacing=0):
+        num_sections = len(self.qiskit_qubits) // number_qubits
+        satisified = None
+        if num_sections < 3:
+            satisified = (2, 1)
+        elif num_sections < 4:
+            satisified = (3, 1)
+        curr_num = num_sections
+        while satisified is None:
+            factor_list = []
+            for i in range(1, int(curr_num/2) + 1):
+                if curr_num % i == 0:
+                    factor_list.append((i, curr_num // i))
+            factor_pair = factor_list[-1]
+            if factor_pair[0] / factor_pair[1] >= 0.5:
+                satisified = factor_pair
+            else:
+                curr_num = curr_num - 1
+        dims = [None, None]
+        if self.dimension_info[0].size > self.dimension_info[1].size:
+            if np.floor(self.dimension_info[0].size / satisified[1]) * np.floor(self.dimension_info[1].size / satisified[0]) >= number_qubits:
+                dims[0] = int(np.floor(self.dimension_info[0].size / satisified[1]))
+                dims[1] = int(np.floor(self.dimension_info[1].size / satisified[0]))
+            else:
+                dims[0] = int(np.ceil(self.dimension_info[0].size / satisified[1]))
+                dims[1] = int(np.ceil(self.dimension_info[1].size / satisified[0]))
+        else:
+            if np.floor(self.dimension_info[1].size / satisified[1]) * np.floor(self.dimension_info[0].size / satisified[0]) >= number_qubits:
+                dims[1] = int(np.floor(self.dimension_info[1].size / satisified[1]))
+                dims[0] = int(np.floor(self.dimension_info[0].size / satisified[0]))
+            else:
+                dims[1] = int(np.ceil(self.dimension_info[1].size / satisified[1]))
+                dims[0] = int(np.ceil(self.dimension_info[0].size / satisified[0]))
+        qubit_sets = []
+        overlapping_sets = []
+        already_captured = set()
+        curr_first = 0
+        break_out_outer = False
+        while curr_first + dims[0] <= self.dimension_info[0].size:
+
+            curr_second = 0
+            break_out_inner = False
+            set_add_outer = False
+            while curr_second + dims[1] <= self.dimension_info[1].size:
+
+                curr_set = []
+                for i in range(curr_first, curr_first + dims[0]):
+                    for j in range(curr_second, curr_second + dims[1]):
+                        curr_set.append(self.hardware_loc_to_obj[(i, j)])
+                qubit_sets.append(curr_set)
+                set_add = True
+                for i in curr_set:
+                    if i in already_captured:
+                        qubit_sets = qubit_sets[:-1]
+                        set_add = False
+                        break
+                set_add_outer = set_add or set_add_outer
+                curr_second += dims[1] + (spacing if set_add else 0)
+
+            curr_first += dims[0] + (spacing if set_add_outer else 0)
+
+        return qubit_sets
 
     def reset(self):
         self.active_holes = set()

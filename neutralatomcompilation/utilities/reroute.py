@@ -18,8 +18,9 @@ class ReRouteStrategy(enum.Enum):
     return self.value == other.value
 
 class ShiftStrategy(enum.Enum):
-  NaiveMinMovement = 1
-  InteractionGraph = 2
+  NaiveMaxSpace = 1
+  NaiveMinMovement = 2
+  InteractionGraph = 4
 
   def __eq__(self, other):
     return self.value == other.value
@@ -56,6 +57,9 @@ class Remapper:
     self.read_count = 0
     self.write_count = 0
     self.access_time = 0
+  
+  def reset_data(self):
+    self.data = {}
 
 class HoleHandler:
   def __init__(self, hardware, interaction_model):
@@ -93,8 +97,55 @@ class HoleHandler:
     self.hh_mapping_reverse.write_count = 0
     self.hh_mapping_reverse.access_counter = 0
     self.interaction_graph = self.interaction_model.interaction_graph.copy()
+    self.added_swaps = 0
 
+  def readjust_starting_loc(self, circuit, original, next_locs, shift_strategy=ShiftStrategy.NaiveMinMovement, route_strategy=ReRouteStrategy.Fail):
+    holes_to_do = self.active_holes
+    self.active_holes = set()
+    self.qh_mapping = copy.copy(self.hardware.qiskit_to_hardware)
+    self.hq_mapping = copy.copy(self.hardware.hardware_to_qiskit)
+    self.hh_mapping.reset_data()
+    self.hh_mapping_reverse.reset_data()
+    for h in self.hq_mapping:
+      self.hh_mapping[h] = h
+      self.hh_mapping_reverse[h] = h
+    self.interaction_graph = self.interaction_model.interaction_graph.copy()
+    self.added_swaps = 0
 
+    relocated_dict = {}
+    qubits = set()
+    for i, q in enumerate(original):
+      relocated_dict[original[i]] = next_locs[i]
+      qubits.add(next_locs[i])
+    q_updates = {}
+    h_updates = {}
+    for h in list(self.hq_mapping.keys()):
+      if h not in relocated_dict:
+        continue
+      q = self.hq_mapping[h]
+      new_h = relocated_dict[h]
+      old_q = self.hq_mapping[new_h]
+
+      q_updates[q] = new_h
+      h_updates[new_h] = q
+      if old_q not in q_updates:
+        q_updates[old_q] = None
+      if h not in h_updates:
+        h_updates[h] = None
+    num_h_none = [h for h in h_updates if h_updates[h] is None]
+    num_q_none = [q for q in q_updates if q_updates[q] is None]
+    assert len(num_h_none) == len(num_q_none)
+    for q in q_updates:
+      if q_updates[q] is None:
+        continue
+      self.qh_mapping[q] = q_updates[q]
+      self.hq_mapping[q_updates[q]] = q
+    for i in range(len(num_h_none)):
+      self.hq_mapping[num_h_none[i]] = num_q_none[i]
+      self.qh_mapping[num_q_none[i]] = num_h_none[i]
+    #print(qubits)
+    c = self.reroute_with_holes(circuit, holes_to_do, shift_strategy=shift_strategy, route_strategy=route_strategy)
+    return c
 
   def shift(self, location, used_qubits, dim, direct, strat="short"):
     to_remove = list(location)
@@ -284,6 +335,7 @@ class HoleHandler:
           raise e
         for index, p1 in enumerate(path[:-2]):
           p2 = path[index + 1]
+          self.qubits_swaps_added_on[self.hh_mapping_reverse[p1], self.hh_mapping_reverse[p2]] += 2
           qq1 = self.hh_mapping_reverse[p1].qiskit_qubit
           qq2 = self.hh_mapping_reverse[p2].qiskit_qubit
           try:
@@ -311,7 +363,7 @@ class HoleHandler:
                          qiskit_qubits=None,
                          shift_strategy=ShiftStrategy.NaiveMinMovement,
                          route_strategy=ReRouteStrategy.Fail):
-
+    self.qubits_swaps_added_on = defaultdict(int)
     if qiskit_qubits is None:
       qiskit_qubits = set()
       for instruction in circuit:
@@ -329,7 +381,7 @@ class HoleHandler:
         self.active_holes.add(h)
       works = self.fail_reroute(circuit)
       if works: return circuit, "good"
-      else: return None, "routing"
+      else: return None, "routing, no insertion"
     elif route_strategy == ReRouteStrategy.Swap:
       curr_circuit = circuit
       for h in holes:

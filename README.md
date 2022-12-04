@@ -3,6 +3,8 @@
 ## Introduction
 This is the compiler from the paper _Exploiting Long-Distance Intractions and Tolerating Atom Loss in Neutral Atom Architectures_ from ISCA 2021: [arxiv]().
 
+It is also the compiler from the paper _Exploiting Long-Distance Intractions and Tolerating Atom Loss in Neutral Atom Architectures_ from QCE 2022: [arxiv]().
+
 ## Installation
 This can be installed using `pip install .` from the main directory.
 
@@ -45,13 +47,37 @@ hh.reroute_with_holes(compiled_circuit, lost_list,
                       route_strategy=NAC.ReRouteStrategy.Strategy)
 ```
 
+To reset the atom loss use:
+```
+hh.reset()
+hw.reset()
+im.reset_graph()
+```
+
 The shift strategies are:
 - `NAC.ShiftStrategy.NaiveMinMovement`: Move atoms in the direction where there are the most unused atoms along the Hardware Graph.
 - `NAC.ShiftStrategy.InteractionGraph`: Move atoms along the shortest Interaction Graph path to a spare qubit.
 
 The routing strategies are:
-- `NAC.reRouteStrategy.Fail`: Do not attempt to reroute the circuit when qubits are out of range.
-- `NAC.ReShiftStrategy.Swap`: Attempt to reroute the circuit when qubits are out of range.
+- `NAC.Reroute.Fail`: Do not attempt to reroute the circuit when qubits are out of range.
+- `NAC.RerouteShiftStrategy.Swap`: Attempt to reroute the circuit when qubits are out of range.
+
+### Atom Loss Handlers: Relocation
+To use relocation, we need to use either the `LookaheadCompilerConstrained` or `ParallelLookaheadCompilerConstrained` compilers.  These make sure that the circuit is constrianed to a specific section of the circuit.  The `LookaheadCompilerConstrained` takes one extra argument, "wide" or "tight". "wide" uses a bounding box that is the square root of the cirucit by the square root of the size of the circuit.  "tight" is the square root of the size of the circuit by the number of qubits in the circuit divided by the square root.  The `ParallelLookaheadCompilerConstrained` has one additional argument, "percentage" which is a decimal value from 0 to 1, and denotes a maximum of how much the architecture is allowed to be used. If the size of the circuit exceeds the percentage usage, only one instance of the cirucit is run.
+
+The constrained compiler has an extra attribute `.viable_node_sets`, which is a list of lists of equal numbers of qubits.  To perform a relocation of the circuit on the architecture, pick one sections from this list and use:
+```
+new_set = compiler.viable_node_sets[i]
+hh.readjust_starting_loc(circuit, compiler.viable_node_sets[0], new_set, shift_strategy=ShiftStrategy, route_strategy=RerouteStrategy)
+```
+to get the new circuit.
+
+The parallel compiles has an extra attribute `.included_constrained_sets`, which is a list of lists of equal numbers of qubits.  To perform a relocation of the circuit on the architecture for multiple parallel instances, pick one sections from this list and use:
+```
+new_set = compiler.included_constrained_sets[i][0]
+hh.readjust_starting_loc(circuit, compiler.included_constrained_sets[0][0], new_set, shift_strategy=ShiftStrategy, route_strategy=RerouteStrategy)
+```
+to get the new circuit.
 
 ### Swap Gates Decomposition
 To insert barriers into a circuit such that follows the specified restrictions for the architecture we do:
